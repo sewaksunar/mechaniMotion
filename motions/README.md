@@ -6,6 +6,6 @@ manim init project my-project --default // in case of here manim init project mo
 
 ## rendering first manim scene ( i.e. CreateCircle)
 ```
-manim -pql main.py CreateCircle
+manim -pql main.py CreateCircle // for hight quality rendering qh
 ```
 ##
