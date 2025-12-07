@@ -17,4 +17,6 @@ manim -pql main.py CreateCircle // for hight quality rendering qh
 pip install -U manim
 
 # 3 Run your scene with preview, low quality (pql)
-manim -pql mechanism.py MechanismAnimation
+manim -pql mechanism.py 
+
+![Example](image.png)
