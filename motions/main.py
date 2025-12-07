@@ -614,6 +614,8 @@ class MechanismAnimation(Scene):
         self.wait(1)
 
 
+from manim import *
+import numpy as np
 
 class FourBarLinkage(Scene):
     def construct(self):
@@ -621,8 +623,8 @@ class FourBarLinkage(Scene):
         omega_2 = 900  # rev/min ccw
         omega_2_rad = omega_2 * 2 * PI / 60  # Convert to rad/s (94.25 rad/s)
         
-        # Scale factor for visualization
-        scale = 1.5
+        # Scale factor for visualization (reduced)
+        scale = 1.2
         
         # Link lengths (estimated from figure)
         L_AB = 2.0 * scale  # Crank length (link 2)
@@ -640,18 +642,24 @@ class FourBarLinkage(Scene):
         # Time tracker
         time_tracker = ValueTracker(0)
         
-        # Fixed ground points
-        A_pos = np.array([-3, -1, 0])
+        # Fixed ground points - A at origin BEFORE axes shift
+        A_pos = ORIGIN
         D_pos = A_pos + np.array([L_AD, 0, 0])
         
-        # Create coordinate system
+        # Create coordinate system centered at A
         axes = Axes(
-            x_range=[-4, 8, 1],
-            y_range=[-2, 5, 1],
+            x_range=[-1, 9, 1],
+            y_range=[-3, 4, 1],
             x_length=8,
             y_length=5,
             axis_config={"color": GRAY, "include_tip": True},
-        ).shift(DOWN * 0.5)
+        )
+        
+        # Shift everything down to prevent overflow
+        shift_amount = DOWN * 1.2 + LEFT * 0.5
+        axes.shift(shift_amount)
+        A_pos = A_pos + shift_amount
+        D_pos = D_pos + shift_amount
         
         x_label = MathTex("x_1").next_to(axes.x_axis.get_end(), RIGHT)
         y_label = MathTex("y_1").next_to(axes.y_axis.get_end(), UP)
@@ -676,7 +684,7 @@ class FourBarLinkage(Scene):
         
         # Fixed pivot points
         A_dot = Dot(A_pos, color=WHITE, radius=0.12)
-        A_label = MathTex("A", font_size=36).next_to(A_dot, LEFT)
+        A_label = MathTex("A", font_size=36).next_to(A_dot, DOWN + LEFT, buff=0.1)
         
         D_dot = Dot(D_pos, color=WHITE, radius=0.12)
         D_label = MathTex("D", font_size=36).next_to(D_dot, DOWN)
@@ -736,11 +744,11 @@ class FourBarLinkage(Scene):
             # Point G (on link BC, about 60% from B to C)
             G_pos = B_pos + 0.6 * (C_pos - B_pos)
             
-            # Point E: perpendicular to BC at G
+            # Point E: perpendicular to BC at G (DOWNWARD - negative perpendicular)
             # Direction of BC
             BC_dir = (C_pos - B_pos) / np.linalg.norm(C_pos - B_pos)
-            # Perpendicular direction (rotate 90° CCW)
-            perp_dir = np.array([-BC_dir[1], BC_dir[0], 0])
+            # Perpendicular direction (rotate 90° CW for downward)
+            perp_dir = np.array([BC_dir[1], -BC_dir[0], 0])
             E_pos = G_pos + L_GE * perp_dir
             
             # Point H: midpoint of CD
@@ -821,7 +829,7 @@ class FourBarLinkage(Scene):
         ))
         
         E_label = always_redraw(lambda: MathTex("E", font_size=28, color=YELLOW).next_to(
-            get_linkage_positions(time_tracker.get_value())[2], UP
+            get_linkage_positions(time_tracker.get_value())[2], DOWN
         ))
         
         # Point F
@@ -854,19 +862,46 @@ class FourBarLinkage(Scene):
             get_linkage_positions(time_tracker.get_value())[5], LEFT
         ))
         
-        # Angle annotation at A (dynamic)
-        def create_angle_arc():
+        # Angle annotation at A with arrow (dynamic)
+        def create_angle_arc_with_arrow():
             current_theta = get_linkage_positions(time_tracker.get_value())[6]
-            arc = Arc(
-                radius=0.6,
-                start_angle=0,
+            arc_radius = 0.7
+            
+            # Create arc with tip (built-in arrow functionality)
+            arc = ArcBetweenPoints(
+                A_pos + arc_radius * RIGHT,
+                A_pos + arc_radius * np.array([np.cos(current_theta), np.sin(current_theta), 0]),
                 angle=current_theta,
                 color=YELLOW,
-                arc_center=A_pos
+                stroke_width=3
             )
-            return arc
+            
+            # Calculate tangent direction at the end of arc
+            tangent_angle = current_theta + PI/2  # Perpendicular to radius
+            arrow_direction = np.array([np.cos(tangent_angle), np.sin(tangent_angle), 0])
+            
+            # Create arrow tip at end of arc
+            end_point = A_pos + arc_radius * np.array([np.cos(current_theta), np.sin(current_theta), 0])
+            
+            arrow = Arrow(
+                end_point - 0.001 * arrow_direction,
+                end_point + 0.25 * arrow_direction,
+                color=YELLOW,
+                buff=0,
+                stroke_width=3,
+                tip_length=0.2,
+                max_stroke_width_to_length_ratio=10,
+                max_tip_length_to_length_ratio=1
+            )
+            
+            return VGroup(arc, arrow)
         
-        angle_arc = always_redraw(create_angle_arc)
+        angle_arc = always_redraw(create_angle_arc_with_arrow)
+        
+        # Omega label near the angle arc
+        omega_label = always_redraw(lambda: MathTex(
+            r"\omega_2", font_size=24, color=YELLOW
+        ).move_to(A_pos + np.array([1.0, 0.6, 0])))
         
         # Link number labels
         link_2_num = always_redraw(lambda: MathTex("2", font_size=28, color=RED).move_to(
@@ -917,7 +952,7 @@ class FourBarLinkage(Scene):
         # Add points and labels
         self.add(B_dot, C_dot, E_dot, F_dot, G_dot, H_dot)
         self.add(B_label, C_label, E_label, F_label, G_label, H_label)
-        self.add(angle_arc)
+        self.add(angle_arc, omega_label)
         self.add(link_2_num, link_3_num, link_4_num)
         self.add(right_angle_G, right_angle_H)
         
@@ -926,266 +961,6 @@ class FourBarLinkage(Scene):
         
         self.play(
             time_tracker.animate.set_value(rotation_time),
-            rate_func=linear,
-            run_time=10
-        )
-        
-        self.wait(1)
-        # Given parameters
-        omega_2 = 900  # rev/min ccw
-        omega_2_rad = omega_2 * 2 * PI / 60  # Convert to rad/s
-        
-        # Scale factor for visualization
-        scale = 1.5
-        
-        # Link lengths (estimated from figure)
-        L_AB = 2.0 * scale  # Crank length (link 2)
-        L_BC = 5.0 * scale  # Coupler length (link 3)
-        L_CD = 3.5 * scale  # Output link length (link 4)
-        L_AD = 6.0 * scale  # Ground link length
-        
-        # Initial angle of crank (120° from horizontal)
-        theta_2_initial = 120 * DEGREES
-        
-        # Fixed ground points
-        A_pos = np.array([-3, -1, 0])
-        D_pos = A_pos + np.array([L_AD, 0, 0])
-        
-        # Create coordinate system
-        axes = Axes(
-            x_range=[-4, 8, 1],
-            y_range=[-2, 5, 1],
-            x_length=8,
-            y_length=5,
-            axis_config={"color": GRAY, "include_tip": True},
-        ).shift(DOWN * 0.5)
-        
-        x_label = MathTex("x_1").next_to(axes.x_axis.get_end(), RIGHT)
-        y_label = MathTex("y_1").next_to(axes.y_axis.get_end(), UP)
-        
-        # Ground hatching for fixed pivots
-        def create_ground_hatch(pos):
-            hatch = VGroup()
-            for i in range(-5, 6):
-                line = Line(
-                    pos + np.array([i * 0.15, -0.3, 0]),
-                    pos + np.array([i * 0.15 + 0.2, -0.5, 0]),
-                    color=GRAY, stroke_width=2
-                )
-                hatch.add(line)
-            ground_line = Line(pos + LEFT * 0.8 + DOWN * 0.3, 
-                             pos + RIGHT * 0.8 + DOWN * 0.3, 
-                             color=GRAY, stroke_width=4)
-            return VGroup(hatch, ground_line)
-        
-        ground_A = create_ground_hatch(A_pos)
-        ground_D = create_ground_hatch(D_pos)
-        
-        # Fixed pivot points
-        A_dot = Dot(A_pos, color=WHITE, radius=0.12)
-        A_label = MathTex("A", font_size=36).next_to(A_dot, LEFT)
-        
-        D_dot = Dot(D_pos, color=WHITE, radius=0.12)
-        D_label = MathTex("D", font_size=36).next_to(D_dot, DOWN)
-        
-        # Title and parameters
-        title = Text("Four-Bar Linkage Mechanism", font_size=40).to_edge(UP)
-        params = VGroup(
-            MathTex(r"\omega_2 = 900 \text{ rev/min ccw}", font_size=28),
-            MathTex(r"\omega_2 = " + f"{omega_2_rad:.1f}" + r" \text{ rad/s}", font_size=28),
-        ).arrange(DOWN, aligned_edge=LEFT).to_corner(UR, buff=0.5)
-        
-        # Angle tracker
-        theta_2_tracker = ValueTracker(theta_2_initial)
-        
-        # Function to calculate linkage positions
-        def get_linkage_positions(theta_2):
-            # Point B (end of crank)
-            B_pos = A_pos + L_AB * np.array([np.cos(theta_2), np.sin(theta_2), 0])
-            
-            # Point C using geometric constraint (intersection of two circles)
-            # Circle centered at B with radius L_BC
-            # Circle centered at D with radius L_CD
-            
-            dx = D_pos[0] - B_pos[0]
-            dy = D_pos[1] - B_pos[1]
-            d = np.sqrt(dx**2 + dy**2)
-            
-            # Check if solution exists
-            if d > L_BC + L_CD or d < abs(L_BC - L_CD):
-                # Use approximate solution
-                angle_BD = np.arctan2(dy, dx)
-                C_pos = B_pos + L_BC * np.array([np.cos(angle_BD), np.sin(angle_BD), 0])
-            else:
-                # Solve for C position
-                a = (L_BC**2 - L_CD**2 + d**2) / (2 * d)
-                h = np.sqrt(max(0, L_BC**2 - a**2))
-                
-                P_x = B_pos[0] + a * (dx) / d
-                P_y = B_pos[1] + a * (dy) / d
-                
-                C_pos = np.array([
-                    P_x + h * (-dy) / d,
-                    P_y + h * (dx) / d,
-                    0
-                ])
-            
-            # Point E (midpoint of BC on coupler)
-            E_pos = (B_pos + C_pos) / 2
-            
-            # Point G (on link BC, closer to C)
-            G_pos = B_pos + 0.6 * (C_pos - B_pos)
-            
-            # Point H (on link CF)
-            # F is extension from C
-            angle_CD = np.arctan2(C_pos[1] - D_pos[1], C_pos[0] - D_pos[0])
-            F_pos = C_pos + 1.5 * np.array([np.cos(angle_CD), np.sin(angle_CD), 0])
-            H_pos = C_pos + 0.5 * (F_pos - C_pos)
-            
-            return B_pos, C_pos, E_pos, G_pos, F_pos, H_pos
-        
-        # Create linkage elements with always_redraw
-        # Link 2 (Crank AB) - Red
-        link_2 = always_redraw(lambda: Line(
-            A_pos,
-            get_linkage_positions(theta_2_tracker.get_value())[0],
-            color=RED, stroke_width=10
-        ))
-        
-        # Link 3 (Coupler BC) - Blue with fill
-        def create_coupler():
-            B, C, E, G, F, H = get_linkage_positions(theta_2_tracker.get_value())
-            coupler = Polygon(
-                get_linkage_positions(theta_2_tracker.get_value())[0],
-                get_linkage_positions(theta_2_tracker.get_value())[3],
-                get_linkage_positions(theta_2_tracker.get_value())[1],
-                get_linkage_positions(theta_2_tracker.get_value())[2],
-                color=BLUE, fill_opacity=0.3, stroke_width=8
-            )
-            return coupler
-        
-        link_3 = always_redraw(create_coupler)
-        
-        # Link 4 (Output CD) - Blue with fill
-        def create_link_4():
-            B, C, E, G, F, H = get_linkage_positions(theta_2_tracker.get_value())
-            link4 = Polygon(
-                D_pos,
-                C,
-                F,
-                H,
-                color=BLUE_C, fill_opacity=0.3, stroke_width=8
-            )
-            return link4
-        
-        link_4 = always_redraw(create_link_4)
-        
-        # Joint points
-        B_dot = always_redraw(lambda: Dot(
-            get_linkage_positions(theta_2_tracker.get_value())[0],
-            color=WHITE, radius=0.1
-        ))
-        
-        B_label = always_redraw(lambda: MathTex("B", font_size=32).next_to(
-            get_linkage_positions(theta_2_tracker.get_value())[0], LEFT
-        ))
-        
-        C_dot = always_redraw(lambda: Dot(
-            get_linkage_positions(theta_2_tracker.get_value())[1],
-            color=WHITE, radius=0.1
-        ))
-        
-        C_label = always_redraw(lambda: MathTex("C", font_size=32).next_to(
-            get_linkage_positions(theta_2_tracker.get_value())[1], UP + RIGHT
-        ))
-        
-        # Point E
-        E_dot = always_redraw(lambda: Dot(
-            get_linkage_positions(theta_2_tracker.get_value())[2],
-            color=YELLOW, radius=0.08
-        ))
-        
-        E_label = always_redraw(lambda: MathTex("E", font_size=28).next_to(
-            get_linkage_positions(theta_2_tracker.get_value())[2], DOWN
-        ))
-        
-        # Point F
-        F_dot = always_redraw(lambda: Dot(
-            get_linkage_positions(theta_2_tracker.get_value())[4],
-            color=GREEN, radius=0.08
-        ))
-        
-        F_label = always_redraw(lambda: MathTex("F", font_size=28).next_to(
-            get_linkage_positions(theta_2_tracker.get_value())[4], RIGHT
-        ))
-        
-        # Point G
-        G_dot = always_redraw(lambda: Dot(
-            get_linkage_positions(theta_2_tracker.get_value())[3],
-            color=ORANGE, radius=0.08
-        ))
-        
-        G_label = always_redraw(lambda: MathTex("G", font_size=28).next_to(
-            get_linkage_positions(theta_2_tracker.get_value())[3], UP
-        ))
-        
-        # Point H
-        H_dot = always_redraw(lambda: Dot(
-            get_linkage_positions(theta_2_tracker.get_value())[5],
-            color=PURPLE, radius=0.08
-        ))
-        
-        H_label = always_redraw(lambda: MathTex("H", font_size=28).next_to(
-            get_linkage_positions(theta_2_tracker.get_value())[5], LEFT
-        ))
-        
-        # Angle annotation at A
-        def create_angle_arc():
-            arc = Arc(
-                radius=0.6,
-                start_angle=0,
-                angle=theta_2_tracker.get_value(),
-                color=YELLOW,
-                arc_center=A_pos
-            )
-            return arc
-        
-        angle_arc = always_redraw(create_angle_arc)
-        angle_label = always_redraw(lambda: MathTex("120°", font_size=24).next_to(
-            A_pos + np.array([0.8, 0.4, 0]), RIGHT * 0.3
-        ))
-        
-        # Link number labels
-        link_2_num = always_redraw(lambda: MathTex("2", font_size=28, color=RED).move_to(
-            (A_pos + get_linkage_positions(theta_2_tracker.get_value())[0]) / 2 + DOWN * 0.3
-        ))
-        
-        link_3_num = always_redraw(lambda: MathTex("3", font_size=28, color=BLUE).move_to(
-            get_linkage_positions(theta_2_tracker.get_value())[2] + UP * 0.5
-        ))
-        
-        link_4_num = always_redraw(lambda: MathTex("4", font_size=28, color=BLUE_C).move_to(
-            (D_pos + get_linkage_positions(theta_2_tracker.get_value())[1]) / 2 + RIGHT * 0.5
-        ))
-        
-        # Add all elements to scene
-        self.add(axes, x_label, y_label)
-        self.add(ground_A, ground_D)
-        self.add(A_dot, A_label, D_dot, D_label)
-        self.add(title, params)
-        
-        # Add links (order matters for layering)
-        self.add(link_4, link_3, link_2)
-        
-        # Add points and labels
-        self.add(B_dot, C_dot, E_dot, F_dot, G_dot, H_dot)
-        self.add(B_label, C_label, E_label, F_label, G_label, H_label)
-        self.add(angle_arc, angle_label)
-        self.add(link_2_num, link_3_num, link_4_num)
-        
-        # Animate the mechanism - two full rotations
-        self.play(
-            theta_2_tracker.animate.set_value(theta_2_initial + 4 * PI),
             rate_func=linear,
             run_time=10
         )
