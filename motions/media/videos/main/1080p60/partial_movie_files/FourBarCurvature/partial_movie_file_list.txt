@@ -1,0 +1,7 @@
+# This file is used internally by FFMPEG.
+file 'file:C:/Users/sewak/Documents/Animation/mechaniMotion/motions/media/videos/main/1080p60/partial_movie_files/FourBarCurvature/2514346032_60789886_3771698695.mp4'
+file 'file:C:/Users/sewak/Documents/Animation/mechaniMotion/motions/media/videos/main/1080p60/partial_movie_files/FourBarCurvature/384855266_4052660874_1779503199.mp4'
+file 'file:C:/Users/sewak/Documents/Animation/mechaniMotion/motions/media/videos/main/1080p60/partial_movie_files/FourBarCurvature/384855266_2325638668_2961753843.mp4'
+file 'file:C:/Users/sewak/Documents/Animation/mechaniMotion/motions/media/videos/main/1080p60/partial_movie_files/FourBarCurvature/384855266_4052660874_1528553940.mp4'
+file 'file:C:/Users/sewak/Documents/Animation/mechaniMotion/motions/media/videos/main/1080p60/partial_movie_files/FourBarCurvature/384855266_1699122714_3812055977.mp4'
+file 'file:C:/Users/sewak/Documents/Animation/mechaniMotion/motions/media/videos/main/1080p60/partial_movie_files/FourBarCurvature/384855266_691929108_2251495446.mp4'
