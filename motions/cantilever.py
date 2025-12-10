@@ -1,67 +1,10 @@
 from manim import *
 import numpy as np
 
-class MySquare(Square):
-    @override_animation(FadeIn)
-    def _fade_in_override(self, **kwargs):
-        return Create(self, **kwargs)
 
-class OverrideAnimationExample(Scene):
-    def construct(self):
-        self.play(FadeIn(MySquare()))
-
-class PinSupportBar(VGroup):
-    def __init__(self, length=4, height=0.5, **kwargs):
-        super().__init__(**kwargs)
-        self.length = length
-        self.height = height
-        self.bar = Rectangle(width=length, height=height, color=BLUE)
-        pin1 = Triangle(color=RED).scale(0.3).next_to(self.bar.get_left(), DOWN, buff=0)
-        pin2 = Triangle(color=RED).scale(0.3).next_to(self.bar.get_right(), DOWN, buff=0)
-        pin2.shift(DOWN * 0.2)
-        pin1.shift(DOWN * 0.2)
-        self.add(self.bar, pin1, pin2)
-
-    def deflected_curve(self, max_deflection=0.3, samples=60, color=YELLOW):
-        """
-        Returns a smooth curve representing the deflected shape of a simply
-        supported bar under a point load at the center. We approximate the
-        deflection shape with y(x) = delta_max * sin(pi * x / L) for visual clarity.
-
-        max_deflection: peak deflection at midspan in scene units
-        samples: number of points used to draw the curve
-        """
-        L = self.length
-        left = self.bar.get_left()
-        # Build local coordinate system along the bar width
-        pts = []
-        for i in range(samples + 1):
-            t = i / samples
-            x = t * L
-            # sine mode approximation (matches zero deflection at supports)
-            y = -max_deflection * np.sin(np.pi * x / L)
-            # position relative to left support
-            pts.append(left + RIGHT * x + UP * y)
-        curve = VMobject(color=color, stroke_width=6)
-        curve.set_points_smoothly(pts)
-        return curve
-
-    def animate_deflection(self, max_deflection=0.3, run_time=2):
-        curve = self.deflected_curve(max_deflection=max_deflection)
-        return Transform(self.bar, curve, run_time=run_time)
-class PinSupportBarExample(Scene):
-
-    def construct(self):
-        pin_support_bar = PinSupportBar()
-        self.play(FadeIn(pin_support_bar))
-        self.wait(1)
-        transform_bar = PinSupportBar(length=6, height=0.5)
-        self.play(Transform(pin_support_bar, transform_bar))
-
-from manim import *
-import numpy as np
-
-class PinSupportBar(VGroup):
+class CantileverBeam(VGroup):
+    """A cantilever beam with fixed support at left end."""
+    
     def __init__(self, length=6, height=0.4, **kwargs):
         super().__init__(**kwargs)
         self.length = length
@@ -89,20 +32,25 @@ class PinSupportBar(VGroup):
             
             self.layers.append(layer)
             self.add(layer)
-        
-        # Do NOT add supports here—they will be added separately in the scene
     
     def get_deflection_at_x(self, x, max_deflection):
-        """Parabolic deflection for center point load"""
-        normalized_x = 2 * x / self.length
-        return -max_deflection * (1 - normalized_x**2)
+        """Cubic deflection for cantilever with load at free end.
+        
+        Deflection shape: y(x) = -delta_max * (3*x^2/L^2 - 2*x^3/L^3)
+        This matches the standard cantilever deflection curve.
+        """
+        L = self.length
+        normalized_x = (x + L/2) / L  # normalize to [0, 1]
+        normalized_x = max(0, min(1, normalized_x))  # clamp to [0, 1]
+        return -max_deflection * (3 * normalized_x**2 - 2 * normalized_x**3)
     
     def get_slope_at_x(self, x, max_deflection):
-        """Slope of deflection curve"""
-        # Derivative of -delta * (1 - (2x/L)^2)
-        # = -delta * (-2 * (2x/L) * (2/L))
-        # = delta * 8x / L^2
-        return max_deflection * 8 * x / (self.length ** 2)
+        """Slope of deflection curve (derivative)."""
+        L = self.length
+        normalized_x = (x + L/2) / L
+        normalized_x = max(0, min(1, normalized_x))
+        # d/dx of -delta * (3*x^2/L^2 - 2*x^3/L^3) = -delta * (6*x/L^2 - 6*x^2/L^3)
+        return -max_deflection * (6 * normalized_x / L - 6 * normalized_x**2 / L)
     
     def animate_deflection(self, max_deflection=0.5, run_time=2):
         """Animate proper beam bending using an internal alpha timeline."""
@@ -176,7 +124,7 @@ class PinSupportBar(VGroup):
         top_y = deflection + perp_y * self.height / 2
         
         return top_x, top_y
-    
+
     def get_corner_position(self, x, current_deflection):
         """Get the corner position (top-left/right edge) of the beam at position x."""
         deflection = self.get_deflection_at_x(x, current_deflection)
@@ -194,122 +142,75 @@ class PinSupportBar(VGroup):
         return corner_x, corner_y
 
 
-class CenterLoadDeflection(Scene):
+class CantileverLoadDeflection(Scene):
     def construct(self):
-        # Create beam
+        # Create cantilever beam
         L = 6
-        bar = PinSupportBar(length=L, height=0.4)
+        beam = CantileverBeam(length=L, height=0.4)
         # Ensure starting geometry uses the same path logic to avoid jumps
-        bar.apply_deflection(0.0)
-        
-        # Shift beam LEFT so left support touches left corner
-        beam_x_offset = -0.15
-        bar.shift(beam_x_offset * RIGHT)
-        
-        self.play(FadeIn(bar), run_time=0.6)
+        beam.apply_deflection(0.0)
+        self.play(FadeIn(beam), run_time=0.6)
         self.wait(0.5)
 
-        # Point load at center
+        # Point load at free end (x = L/2)
         delta_max = 0.8
         defl = ValueTracker(0.0)
-        bar.add_deflection_updater(defl, samples=360)
+        beam.add_deflection_updater(defl, samples=360)
 
-        def center_top_pos():
-            x, y = bar.get_top_surface_point_at_x(0, defl.get_value())
+        def free_end_top_pos():
+            x, y = beam.get_top_surface_point_at_x(L / 2, defl.get_value())
             return np.array([x, y, 0.0])
 
-        # Always keep the arrow in contact with the beam's top surface
+        # Always keep the arrow in contact with the beam's top surface at free end
         arrow = always_redraw(
             lambda: Arrow(
-                start=center_top_pos() + 1 * UP,
-                end=center_top_pos(),
+                start=free_end_top_pos() + 1.4 * UP,
+                end=free_end_top_pos(),
                 color=RED,
                 buff=0,
                 stroke_width=7,
                 tip_length=0.18,
             )
         )
-        label = always_redraw(lambda: MathTex("P", color=RED, font_size=52).next_to(center_top_pos() + 1.4 * UP, UP, buff=0.15))
+        label = always_redraw(lambda: MathTex("P", color=RED, font_size=52).next_to(free_end_top_pos() + 1.4 * UP, UP, buff=0.15))
 
-        # Fixed left support (does NOT move)
+        # Fixed support at left end (x = -L/2)
         tri_width = 0.52
         tri_height = 0.18
-        left_x = -L / 2
-        left_y = -0.2  # fixed height
-        left_support = VGroup(
+        fixed_x = -L / 2
+        fixed_y = -0.2  # fixed height
+        
+        # Create fixed support with triangular seat and ground hatching
+        fixed_support = VGroup(
+            # Triangle pointing up (fixed support)
             Polygon(
-                [left_x - tri_width/2, left_y - tri_height, 0],
-                [left_x + tri_width/2, left_y - tri_height, 0],
-                [left_x, left_y, 0],  # apex
+                [fixed_x - tri_width/2, fixed_y - tri_height, 0],
+                [fixed_x + tri_width/2, fixed_y - tri_height, 0],
+                [fixed_x, fixed_y, 0],  # apex
                 color=WHITE,
                 fill_opacity=1,
                 stroke_width=2,
                 stroke_color=WHITE
             ),
+            # Base plate
             Rectangle(
                 width=0.8, 
                 height=0.12, 
                 color=GRAY,
                 fill_opacity=1
-            ).move_to([left_x, left_y - 0.52, 0]),
+            ).move_to([fixed_x, fixed_y - 0.52, 0]),
+            # Ground hatching
             VGroup(*[
                 Line(
-                    [left_x - 0.36 + i*0.11, left_y - 0.6, 0],
-                    [left_x - 0.25 + i*0.11, left_y - 0.78, 0],
+                    [fixed_x - 0.36 + i*0.11, fixed_y - 0.6, 0],
+                    [fixed_x - 0.25 + i*0.11, fixed_y - 0.78, 0],
                     color=WHITE,
                     stroke_width=2
                 ) for i in range(8)
             ])
         )
 
-        # Dynamic right support that follows LOWER corner as beam bends
-        def create_right_support():
-            right_x = L / 2 + 0.3
-            # Track the LOWER right corner (bottom edge of beam)
-            corner_x, corner_y = bar.get_corner_position(L / 2, defl.get_value())
-            # Lower corner is height/2 BELOW the upper corner
-            lower_corner_y = corner_y - bar.height
-            
-            roller_r = 0.14
-            y_c = lower_corner_y - 0.32
-            base_y = y_c + roller_r
-            
-            return VGroup(
-                Polygon(
-                    [corner_x - tri_width/2, base_y, 0],
-                    [corner_x + tri_width/2, base_y, 0],
-                    [corner_x, lower_corner_y, 0],  # apex at LOWER beam corner
-                    color=GRAY,
-                    fill_opacity=1,
-                    stroke_width=2,
-                    stroke_color=WHITE
-                ),
-                Circle(
-                    radius=roller_r,
-                    color=WHITE,
-                    fill_opacity=1,
-                    stroke_width=2,
-                    stroke_color=WHITE
-                ).move_to([corner_x, y_c, 0]),
-                Rectangle(
-                    width=0.8,
-                    height=0.12,
-                    color=GRAY,
-                    fill_opacity=1
-                ).move_to([corner_x, y_c - roller_r - 0.06, 0]),
-                VGroup(*[
-                    Line(
-                        [corner_x - 0.36 + i*0.11, y_c - roller_r - 0.14, 0],
-                        [corner_x - 0.25 + i*0.11, y_c - roller_r - 0.32, 0],
-                        color=WHITE,
-                        stroke_width=2
-                    ) for i in range(8)
-                ])
-            )
-        
-        right_support = always_redraw(create_right_support)
-        
-        self.add(left_support, right_support)
+        self.add(fixed_support)
 
         self.play(Create(arrow), FadeIn(label), run_time=0.6)
         self.wait(0.2)
@@ -317,12 +218,12 @@ class CenterLoadDeflection(Scene):
         # Animate the deflection smoothly via shared tracker
         self.play(defl.animate.set_value(delta_max), run_time=2.5, rate_func=smooth)
         # Freeze the current shape (optional): remove updaters to reduce CPU in long waits
-        bar.clear_updaters()
+        beam.clear_updaters()
         self.wait(1)
         
-        # Formula
+        # Formula for cantilever deflection
         formula = MathTex(
-            r"\delta_{max} = \frac{PL^3}{48EI}",
+            r"\delta_{max} = \frac{PL^3}{3EI}",
             font_size=42,
             color=WHITE
         ).to_corner(UR).shift(DOWN * 0.3)
